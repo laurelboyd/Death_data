@@ -1,0 +1,121 @@
+---
+title: "Preventable deaths - Focus on suicide in the United States, 2017"
+author: "[Laurel  Boyd](https://github.com/laurelboyd)"
+date: "`r Sys.Date()`"
+output: xaringan::moon_reader
+#yolo: true #under 
+---
+
+```{r setup, include=FALSE, messages = FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+```{r install required packages}
+#devtools::install_github("yihui/xaringan")
+library(xaringan) #automatically update markdown when editing
+library(arules) #create sparse matrix
+#library(dplyr) #SQL wrapper
+#library(stringr) #regex functionality within dplyr
+```
+
+## Suicide in the United States
+
+According to the CDC, suicide is the 10th leading cause of death, making it one of the most preventable deaths in the United States.[^1] This investigation will look at causes of death associated with suicide to investigate where intervention (purely on the basis of combinations of comborbities) could possibly be applied. 
+
+[^1] https://www.cdc.gov/violenceprevention/suicide/fastfact.html
+
+Causes of death for 2017 (most recent year of available data) have been imported directly from the CDC Wonder website: https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm#Mortality_Multiple . They have been imported via a python script (to account for file format without delimeters) and the processed data is imported below.
+
+With just causes of death columns, subset of data we can look at combinations of cause of death.
+
+First we need to import the CSV file with causes of death - but to consolidate the causes of death into a single column (create a sparse matrix by removing the commas)
+```{r import data}
+VS17 <-read.transactions("VS17MORT.csv", sep= ",")
+```
+Next we can look at the overal number and distrubution of causes of death.
+
+```{r overall death summary}
+summary(VS17)
+```
+There were 5,640,070 deaths reported in 2017 using 5661 ICD-10 codes. Cardiac arrest (ICD-10 I46.9) is the most commonly reported cause of death followed by hypertention (I10).
+
+causes of suicide
+
+Next, we'll subset all reported deaths to those of interest for this investigation, ICD-10 codes associated with suicide: U03,X60-X84, and Y87.0.
+
+```{r subset to suicide codes}
+# 
+# diabetesrules <-subset(VS17, items %pin% c("E11"))
+# summary(diabetesrules)
+# 
+# 
+# eatingdisorderrules <-subset(VS17, items %pin% c("F509") | items %pin% c("E43"))
+# summary(eatingdisorderrules)
+# 
+# tobaccorules <-subset(VS17, items %pin% c("F179"))
+# summary(tobaccorules)
+# 
+# 
+# injuryrules <-subset(VS17, items %pin% c("T149") | items %pin% c("TS099")| items %pin% c("T09"))
+# summary(injuryrules)
+
+depressionrules <-subset(VS17, items %pin% c("F32"))
+summary(depressionrules)
+
+# nicotinerules <-subset(VS17, items %pin% c("F17"))
+# summary(nicotinerules)
+# suiciderules <-subset(VS17, items %pin% c("U03") |items %pin% c("X6") | items %pin% c("X7") | items %pin% c("X81") | items %pin% c("X82")
+#                         | items %pin% c("X83") | items %pin% c("X84") | items %pin% c("Y87"))
+# 
+# summary(suiciderules)
+```
+
+There were 33,524 deaths with depression listed as a cause of death in 2017. Of these, most common codes associated with the depression diagnosis are I10 (essential hypertension), F03 (unspecified dementia) and F41.9 (unspecified anxiety disorder).
+
+```{r frequency plots}
+par(mfrow=c(1,2))
+options("scipen"=1000, "digits"=6)
+itemFrequencyPlot(depressionrules,
+                  type="relative",
+                  topN=10, # can be changed to the number of interest
+                  horiz=TRUE,
+                  col='steelblue3',
+                  xlab='',
+                  main='Item frequency, relative')
+
+itemFrequencyPlot(depressionrules,
+                  type="absolute",
+                  topN=10,
+                  horiz=TRUE,
+                  col='steelblue3',
+                  xlab='',
+                  main='Item frequency, absolute')
+
+
+# tbl <- crossTable(depressionrules, sort=TRUE)
+# tbl[1:5,1:5]
+```
+Next we'll look at lift of combinations of diagnoses associated with nicotine dependence. Broadly speaking, lift greater than 1 is indicative of complementary combinations while lift less than 1 is indicative of substitute combinations.
+
+```{r crosstabs}
+crossTable(depressionrules, measure='lift',sort=T)[1:10,1:10]
+```
+
+Run a chi-square test to see whether the association between depression and nicotine dependence is statistically significant (as lift is close to 1 but the overall counts are around 5,000 so quite high).
+
+```{r search for rules, echo=FALSE}
+crossTable(depressionrules, measure='chi')['F329', 'F179']
+```
+It's likely the probability of nicotine dependence assigned if depression is assigned is not due to chance alone. The chi-square test is statistically signficant.
+
+This is an interesting insight but it's likely there are other combinations of rules.
+
+```{r look for rules}
+
+rules <- apriori(depressionrules,
+                 parameter = list(support=.00005,
+                                  minlen=2,
+                                  target='rules' # to mine for rules
+                                  ))
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
